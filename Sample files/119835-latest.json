@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "fund_house": "SBI Mutual Fund",
+    "scheme_type": "Open Ended Schemes",
+    "scheme_category": "Equity Scheme - Contra Fund",
+    "scheme_code": 119835,
+    "scheme_name": "SBI CONTRA FUND - DIRECT PLAN - GROWTH"
+  },
+  "data": [
+    {
+      "date": "16-08-2024",
+      "nav": "421.54250"
+    }
+  ],
+  "status": "SUCCESS"
+}

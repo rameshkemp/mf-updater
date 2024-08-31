@@ -8,17 +8,32 @@
  * "Quant Large & Mid Cap Fund - Direct plan Growth":120826 - https://api.mfapi.in/mf/120826/latest
  */
 
+var dateList = {
+  "currentNAV": '',
+  "prevNAV": '',
+  "T-3NAV": '',
+  "T-4NAV": '',
+  "T-1wkNAV": '',
+  "T-1mNAV": '',
+  "T-3mNAV": '',
+  "T-6mNAV": '',
+  "T-9mNAV": '',
+  "T-1yNAV": '',
+  "T-3yNAV": '',
+  "T-5yNAV": '',
+  "T-10yNAV": ''
+};
+var uniqueFunds = {};
+var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Mutual Funds')
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Mutual Fund')
-      .addItem('Update Data', 'updateData')
-      .addToUi();
+    .addItem('Update Data', 'updateData')
+    .addToUi();
 }
 
 function updateData() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Mutual Funds')
-
   if (sheet.getName() != 'Mutual Funds') {
     return
   }
@@ -26,37 +41,36 @@ function updateData() {
   var dataRange = sheet.getDataRange();
   var data = dataRange.getValues();
   var noOfRows = dataRange.getNumRows()
-  var uniqueFunds = {};
   var pnl_summary = {};
   var summary = ""
-  
+
   //..... Progress .....
   var exeDate = new Date()
   var exeDateStr = Utilities.formatDate(exeDate, Session.getScriptTimeZone(), 'dd-MM-yyyy HH:MM:ss');
   //..... Execution status .....
-  sheet.getRange(1, 12).setValue("Execution started at: " + String(exeDateStr)); SpreadsheetApp.flush();
+  sheet.getRange(1, 10).setValue("Started at " + String(exeDateStr)); SpreadsheetApp.flush();
   //..... Progress .....
-  sheet.getRange(2, 10).setValue("Rows to analyse: " + noOfRows); SpreadsheetApp.flush();
+  logStatus("Rows to analyse: " + noOfRows)
 
   for (var i = 8; i < noOfRows; i++) { // Skipping the header rows hence starting from row 9
     //..... Progress .....
-    sheet.getRange(2, 10).setValue("Processing row: " + i); SpreadsheetApp.flush();
+    logStatus("Analyzing row: " + i)
     var fundName = data[i][2];
     if (fundName && !uniqueFunds[fundName]) {
       var schemeCode = getSchemeCode(fundName);
       //..... Progress .....
-      sheet.getRange(2, 10).setValue(fundName + " - Scheme Code - " + schemeCode); SpreadsheetApp.flush();
+      logStatus("Row: " + i + " -> " + fundName + " - Scheme Code - " + schemeCode)
       if (schemeCode) {
         var latestNAV = getLatestNAV(schemeCode);
-        
+
         //..... Progress .....
-        sheet.getRange(2, 10).setValue(fundName + " - Latest NAV: " + latestNAV.nav); SpreadsheetApp.flush();
+        logStatus("Row: " + i + " -> " + fundName + " - Latest NAV fetched = " + latestNAV.nav)
 
         var allNAVs = getAllNAVs(schemeCode);
-        
+
         //..... Progress .....
-        sheet.getRange(2, 10).setValue(fundName + " - All NAVs fetched."); SpreadsheetApp.flush();
-        
+        logStatus("Row: " + i + " -> " + fundName + " - All NAVs fetched.")
+
         uniqueFunds[fundName] = {
           schemeCode: schemeCode,
           latestNAV: latestNAV,
@@ -67,100 +81,100 @@ function updateData() {
       }
     }
   }
-  
+
+  buildDatesList()
+  //..... Progress .....
+  logStatus("Dates List created based on Anchored MF.")
+  updateFunds()
+
   for (var i = 8; i < noOfRows; i++) { // Skipping the header rows
     var fundName = data[i][2];
     if (fundName && uniqueFunds[fundName]) {
-      var schemeCode = uniqueFunds[fundName].schemeCode;
-      var latestNAV = uniqueFunds[fundName].latestNAV;
-      var allNAVs = uniqueFunds[fundName].allNAVs;
 
-      var currentNAV = parseFloat(latestNAV.nav);
-      if (pnl_summary[String(latestNAV.date)] == null) {
+      var currentNAV = parseFloat(uniqueFunds[fundName]["currentNAV"]);
+      var currentNAVDate = dateList["currentNAV"]
+      if (pnl_summary[String(currentNAVDate)] == null) {
         var funds = new Set()
         funds.add(fundName)
-        pnl_summary[String(latestNAV.date)] = funds
+        pnl_summary[String(currentNAVDate)] = funds
       } else {
-        pnl_summary[String(latestNAV.date)].add(fundName)
+        pnl_summary[String(currentNAVDate)].add(fundName)
       }
 
       var invDateStr = sheet.getRange(i + 1, 1).getValue()
       var investedDate = new Date(String(invDateStr));
-      var latestNAVDate = new Date(latestNAV.date.split('-').reverse().join('-'));
+      var latestNAVDate = new Date(currentNAVDate.split('-').reverse().join('-'));
       investedDate = Utilities.formatDate(investedDate, Session.getScriptTimeZone(), 'MM-dd-yyyy')
       latestNAVDate = Utilities.formatDate(latestNAVDate, Session.getScriptTimeZone(), 'MM-dd-yyyy')
       investedDate = new Date(investedDate)
       latestNAVDate = new Date(latestNAVDate)
-      var refDate = String(latestNAV.date);
-      
+
       //..... Progress .....
-      sheet.getRange(2, 10).setValue(fundName + " - Row #: " + (i+1) + " is getting updated."); SpreadsheetApp.flush();
+      logStatus("Row: " + (i+1) + " -> " + fundName + " values will be updated")
 
       //Invested Value = no of units * buy NAV
-      sheet.getRange(i + 1, 6).setFormula("=D"+ (i+1) + "*E" + (i+1));
-      
+      sheet.getRange(i + 1, 6).setFormula("=D" + (i + 1) + "*E" + (i + 1));
+
       //STT = purchase amt - Invested Value
-      sheet.getRange(i + 1, 7).setFormula("=B"+ (i+1) + "-F"+ (i+1));
-      
+      sheet.getRange(i + 1, 7).setFormula("=B" + (i + 1) + "-F" + (i + 1));
+
       //Current NAV = API call value
       sheet.getRange(i + 1, 8).setValue(currentNAV);
-      sheet.getRange(i + 1, 8).setNote(String(latestNAV.date));
-      
+      sheet.getRange(i + 1, 8).setNote(currentNAVDate);
+
       //Current Worth = Current NAV * no of units
-      sheet.getRange(i + 1, 9).setFormula("=D"+ (i+1) + "*H" + (i+1));
+      sheet.getRange(i + 1, 9).setFormula("=D" + (i + 1) + "*H" + (i + 1));
 
       //pnl = Current Worth - Invested Value
-      sheet.getRange(i + 1, 10).setFormula("=I"+ (i+1) + "-F" + (i+1));
-      sheet.getRange(i + 1, 10).setNote(String(latestNAV.date));
+      sheet.getRange(i + 1, 10).setFormula("=I" + (i + 1) + "-F" + (i + 1));
+      sheet.getRange(i + 1, 10).setNote(currentNAVDate);
 
       //pnl % = pnl / Invested Value
-      sheet.getRange(i + 1, 11).setFormula("=J"+ (i+1) + "/F" + (i+1));
-      sheet.getRange(i + 1, 11).setNote(String(latestNAV.date));
+      sheet.getRange(i + 1, 11).setFormula("=J" + (i + 1) + "/F" + (i + 1));
+      sheet.getRange(i + 1, 11).setNote(currentNAVDate);
 
       //NAV Diff = Current NAV - Buy NAV
-      sheet.getRange(i + 1, 12).setFormula("=H"+ (i+1) + "-E" + (i+1));
-      sheet.getRange(i + 1, 12).setNote(String(latestNAV.date));
+      sheet.getRange(i + 1, 12).setFormula("=H" + (i + 1) + "-E" + (i + 1));
+      sheet.getRange(i + 1, 12).setNote(currentNAVDate);
 
-      // PrevNAV value and date = API Call value
-      setNearestNavValue(sheet, allNAVs, i + 1, 13, latestNAV.date, 1);
-      var refDate = sheet.getRange(i + 1, 13).getNote();
-      var prevNAV = parseFloat(sheet.getRange(i + 1, 13).getValue());
+      // PrevNAV value
+      var prevNAVDate = dateList["prevNAV"];
+      var prevNAV = parseFloat(uniqueFunds[fundName]["prevNAV"]);
+      sheet.getRange(i + 1, 13).setValue(prevNAV);
+      sheet.getRange(i + 1, 13).setNote(prevNAVDate);
 
       // D'NAV diff = Current NAV - Prev NAV
-      if ( investedDate < latestNAVDate) {
-        sheet.getRange(i + 1, 14).setFormula("=H"+ (i+1) + "-M" + (i+1));
+      if (investedDate < latestNAVDate) {
+        sheet.getRange(i + 1, 14).setFormula("=H" + (i + 1) + "-M" + (i + 1));
       } else {
         sheet.getRange(i + 1, 14).setFormula("=0");
       }
 
       // Day's P&L = CurrentNAV - Prev NAV * No of Units
-      sheet.getRange(i + 1, 15).setFormula("=N"+ (i+1) + "*D" + (i+1));
-      sheet.getRange(i + 1, 15).setNote(String(latestNAV.date));
+      sheet.getRange(i + 1, 15).setFormula("=N" + (i + 1) + "*D" + (i + 1));
+      sheet.getRange(i + 1, 15).setNote(currentNAVDate + " = " + currentNAV + "\n" + prevNAVDate + " = " + prevNAV);
 
       // Day's P&L % = (CurrentNAV - Prev NAV) / Prev NAV
-      sheet.getRange(i + 1, 16).setFormula("=O"+ (i+1) + "/F" + (i+1));
-      sheet.getRange(i + 1, 16).setNote(refDate + "\n" + prevNAV);
+      sheet.getRange(i + 1, 16).setFormula("=O" + (i + 1) + "/F" + (i + 1));
+      sheet.getRange(i + 1, 16).setNote(currentNAVDate + " = " + currentNAV + "\n" + prevNAVDate + " = " + prevNAV);
 
-      // last T-2 = API call value
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 17, latestNAV.date, 2, currentNAV);
-
-      // last T-3 = API call value
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 18, latestNAV.date, 3, currentNAV);
-
-      // Populate percentage change values for different days and durations = all API call value
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 19, latestNAV.date, 6, currentNAV); // last T-1wk
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 20, getDateNDaysAgo(30), 0, currentNAV); // last T-1M
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 21, getDateNDaysAgo(90), 0, currentNAV); // last T-3M
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 22, getDateNDaysAgo(180), 0, currentNAV); // last T-6M
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 23, getDateNDaysAgo(365), 0, currentNAV); // last T-1yr
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 24, getDateNDaysAgo(1095), 0, currentNAV); // last T-3yr
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 25, getDateNDaysAgo(1826), 0, currentNAV); // last T-5yr
-      setNearestNavPercentage(sheet, allNAVs, i + 1, 26, getDateNDaysAgo(3652), 0, currentNAV); // last T-10yr
+      updateHistoricalData(fundName, "T-3NAV", i + 1, 17)
+      updateHistoricalData(fundName, "T-4NAV", i + 1, 18)
+      updateHistoricalData(fundName, "T-1wkNAV", i + 1, 19)
+      updateHistoricalData(fundName, "T-1mNAV", i + 1, 20)
+      updateHistoricalData(fundName, "T-3mNAV", i + 1, 21)
+      updateHistoricalData(fundName, "T-6mNAV", i + 1, 22)
+      updateHistoricalData(fundName, "T-9mNAV", i + 1, 23)
+      updateHistoricalData(fundName, "T-1yNAV", i + 1, 24)
+      updateHistoricalData(fundName, "T-3yNAV", i + 1, 25)
+      updateHistoricalData(fundName, "T-5yNAV", i + 1, 26)
+      updateHistoricalData(fundName, "T-10yNAV", i + 1, 27)
 
       //..... Progress .....
-      sheet.getRange(2, 10).setValue(fundName + " - Row #: " + (i+1) + " update complete."); SpreadsheetApp.flush();
+      logStatus("Row: " + (i+1) + " -> " + fundName + " update complete.")
     }
   }
+
   //update Net P&L notes
   for (let item in pnl_summary) {
     var funds = ""
@@ -174,13 +188,12 @@ function updateData() {
   sheet.getRange(4, 10).setNote(summary); SpreadsheetApp.flush();
   sheet.getRange(5, 10).setNote(summary); SpreadsheetApp.flush();
   //..... Progress .....
-  sheet.getRange(2, 10).setValue(null); SpreadsheetApp.flush();
+  logStatus(null) //Complete
 
   var CptDate = new Date()
   var CptDateStr = Utilities.formatDate(CptDate, Session.getScriptTimeZone(), 'dd-MM-yyyy HH:MM:ss');
-  sheet.getRange(1, 12).setValue("Execution completed at: " + String(CptDateStr)); SpreadsheetApp.flush();
-  CptDateStr = Utilities.formatDate(CptDate, Session.getScriptTimeZone(), 'dd-MM-yyyy');
-  sheet.getRange(1, 10).setValue(String(CptDateStr)); SpreadsheetApp.flush();
+  sheet.getRange(1, 10).setValue("Completed at " + String(CptDateStr)); SpreadsheetApp.flush();
+
 }
 
 function getSchemeCode(fundName) {
@@ -198,12 +211,11 @@ function getSchemeCode(fundName) {
     option = parts[3].toLowerCase();
   }
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Mutual Funds')
   var cacheLastRow = 2;
   let cacheRange = sheet.getRange("BA2:BB").getValues();
   // Search in the cache first (BA2:BB)
   for (let i = 0; i < cacheRange.length; i++) {
-    if(cacheRange[i][0] == "" && cacheRange[i][1] == "") {
+    if (cacheRange[i][0] == "" && cacheRange[i][1] == "") {
       cacheLastRow = i + 2;
       break;
     }
@@ -234,6 +246,108 @@ function getSchemeCode(fundName) {
   }
 }
 
+function buildDatesList() {
+  const cacheRange = sheet.getRange("BA2:BC").getValues(); // Includes Cached MF Scheme Code, Cached MF Scheme Name, Anchored MF
+
+  var schemeName = ''
+  for (var i = 0; i < cacheRange.length; i++) {
+    if (cacheRange[i][2] === 'Yes') { // Check if Anchored MF is 'Yes'
+      var schemeName = cacheRange[i][1]; // Get Cached MF Scheme Name
+    }
+  }
+
+  if (schemeName === '') {
+    sheet.getRange("BC1").setValue("Anchored MF")
+    sheet.getRange("BC2").setValue("Yes")
+    schemeName = sheet.getRange("BB2").getValue()
+  }
+
+  var fundData = uniqueFunds[schemeName];
+
+  if (fundData) {
+    dateList["currentNAV"] = fundData.latestNAV.date;
+    dateList["prevNAV"] = fundData.allNAVs[1].date;
+    dateList["T-3NAV"] = fundData.allNAVs[2].date;
+    dateList["T-4NAV"] = fundData.allNAVs[3].date;
+    currentNAVDate = new Date(dateList["currentNAV"].split('-').reverse().join('-'));
+    fetchDate = new Date(currentNAVDate); fetchDate.setDate(currentNAVDate.getDate() - 7); dateList["T-1wkNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setMonth(currentNAVDate.getMonth() - 1); dateList["T-1mNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setMonth(currentNAVDate.getMonth() - 3); dateList["T-3mNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setMonth(currentNAVDate.getMonth() - 6); dateList["T-6mNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setMonth(currentNAVDate.getMonth() - 9); dateList["T-9mNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setFullYear(currentNAVDate.getFullYear() - 1); dateList["T-1yNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setFullYear(currentNAVDate.getFullYear() - 3); dateList["T-3yNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setFullYear(currentNAVDate.getFullYear() - 5); dateList["T-5yNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+    fetchDate = new Date(currentNAVDate); fetchDate.setFullYear(currentNAVDate.getFullYear() - 10); dateList["T-10yNAV"] = getDateFromResponse(fetchDate, fundData.allNAVs);
+  }
+
+}
+
+function getDateFromResponse(targetDate, allNAVs) {
+  targetDateObj = new Date(targetDate)
+  for (var j = 0; j < allNAVs.length; j++) {
+    var navDate = new Date(allNAVs[j].date.split('-').reverse().join('-'));
+    if (navDate <= targetDateObj) {
+      return allNAVs[j].date
+    }
+  }
+  return ''
+}
+
+function updateFunds() {
+  for (var fundName in uniqueFunds) {
+    if (uniqueFunds.hasOwnProperty(fundName)) {
+      var fundData = uniqueFunds[fundName];
+
+      fundData["currentNAV"] = fundData.latestNAV.nav;
+      fundData["prevNAV"] = getNAVForDate(dateList["prevNAV"], fundData.allNAVs);
+      fundData["T-3NAV"] = getNAVForDate(dateList["T-3NAV"], fundData.allNAVs);
+      fundData["T-4NAV"] = getNAVForDate(dateList["T-4NAV"], fundData.allNAVs);
+      fundData["T-1wkNAV"] = getNAVForDate(dateList["T-1wkNAV"], fundData.allNAVs);
+      fundData["T-1mNAV"] = getNAVForDate(dateList["T-1mNAV"], fundData.allNAVs);
+      fundData["T-3mNAV"] = getNAVForDate(dateList["T-3mNAV"], fundData.allNAVs);
+      fundData["T-6mNAV"] = getNAVForDate(dateList["T-6mNAV"], fundData.allNAVs);
+      fundData["T-9mNAV"] = getNAVForDate(dateList["T-9mNAV"], fundData.allNAVs);
+      fundData["T-1yNAV"] = getNAVForDate(dateList["T-1yNAV"], fundData.allNAVs);
+      fundData["T-3yNAV"] = getNAVForDate(dateList["T-3yNAV"], fundData.allNAVs);
+      fundData["T-5yNAV"] = getNAVForDate(dateList["T-5yNAV"], fundData.allNAVs);
+      fundData["T-10yNAV"] = getNAVForDate(dateList["T-10yNAV"], fundData.allNAVs);
+    }
+  }
+}
+
+function getNAVForDate(date, allNAVs) {
+  var dateObj = new Date(date.split('-').reverse().join('-'));
+  for (var i = 0; i < allNAVs.length; i++) {
+    var navDate = new Date(allNAVs[i].date.split('-').reverse().join('-'));
+    if (navDate <= dateObj) {
+      return allNAVs[i].nav;
+    }
+  }
+  return null;
+}
+
+function updateHistoricalData(fundName, indexValue, row, col) {
+  var NAV = parseFloat(uniqueFunds[fundName][indexValue]);
+  if (!NAV) {
+    sheet.getRange(row, col).setValue(null)
+    sheet.getRange(row, col).setNote(dateList[indexValue] + "\nFUND was not started by this date.")
+    return
+  }
+
+  var divider = 1
+  if (indexValue === "T-3yNAV") {
+    divider = 3
+  } else if (indexValue === "T-5yNAV") {
+      divider = 5
+  } else if (indexValue === "T-10yNAV") {
+      divider = 10
+  }
+
+  sheet.getRange(row, col).setFormula("=((H" + row + "-" + NAV + ")/" + NAV + ")/" + divider);
+  sheet.getRange(row, col).setNote(dateList[indexValue] + "\n" + NAV)
+}
+
 function getLatestNAV(schemeCode) {
   var url = 'https://api.mfapi.in/mf/' + schemeCode + '/latest';
   var response = UrlFetchApp.fetch(url);
@@ -250,49 +364,7 @@ function getAllNAVs(schemeCode) {
   return data.data;
 }
 
-function getDateNDaysAgo(days) {
-  var date = new Date();
-  date.setDate(date.getDate() - days);
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'dd-MM-yyyy');
-}
-
-function setNearestNavValue(sheet, allNAVs, row, col, referenceDate, daysAgo = 0) {
-  var targetDateObj = new Date(referenceDate.split('-').reverse().join('-'));
-  targetDateObj.setDate(targetDateObj.getDate() - daysAgo);
-
-  for (var j = 0; j < allNAVs.length; j++) {
-    var navDate = new Date(allNAVs[j].date.split('-').reverse().join('-'));
-    if (navDate <= targetDateObj) {
-      sheet.getRange(row, col).setValue(parseFloat(allNAVs[j].nav));
-      sheet.getRange(row, col).setNote(String(allNAVs[j].date));
-      break;
-    }
-  }
-}
-
-function setNearestNavPercentage(sheet, allNAVs, row, col, referenceDate, daysAgo, currentNAV) {
-  var targetDateObj = new Date(referenceDate.split('-').reverse().join('-'));
-  targetDateObj.setDate(targetDateObj.getDate() - daysAgo);
-
-  for (var j = 0; j < allNAVs.length; j++) {
-    var navDate = new Date(allNAVs[j].date.split('-').reverse().join('-'));
-    if (navDate <= targetDateObj) {
-      var previousNAV = parseFloat(allNAVs[j].nav);
-      
-      // Calculate the difference in years
-      var todayDate = new Date();
-      var timeDiff = todayDate - navDate;
-      var yearsDiff = parseInt(timeDiff / (1000 * 3600 * 24 * 365)); // Convert milliseconds to years
-
-      // Ensure that yearsDiff is not zero to avoid division by zero
-      if (yearsDiff > 0) {
-        var annualizedReturn = parseFloat(((currentNAV - previousNAV) / previousNAV) / yearsDiff);
-      } else {
-        var annualizedReturn = parseFloat((currentNAV - previousNAV) / previousNAV); 
-      }
-      sheet.getRange(row, col).setValue(annualizedReturn);
-      sheet.getRange(row, col).setNote(String(allNAVs[j].date) + "\n" + String(allNAVs[j].nav));
-      break;
-    }
-  }
+function logStatus(msg) {
+  sheet.getRange(2, 10).setValue(msg); 
+  SpreadsheetApp.flush();  
 }

@@ -92,7 +92,7 @@ function updateData() {
     if (fundName && uniqueFunds[fundName]) {
 
       var currentNAV = parseFloat(uniqueFunds[fundName]["currentNAV"]);
-      var currentNAVDate = dateList["currentNAV"]
+      var currentNAVDate = uniqueFunds[fundName]["currentNAVDate"]
       if (pnl_summary[String(currentNAVDate)] == null) {
         var funds = new Set()
         funds.add(fundName)
@@ -300,6 +300,7 @@ function updateFunds() {
       var fundData = uniqueFunds[fundName];
 
       fundData["currentNAV"] = fundData.latestNAV.nav;
+      fundData["currentNAVDate"] = fundData.latestNAV.date;
       fundData["prevNAV"] = getNAVForDate(dateList["prevNAV"], fundData.allNAVs);
       fundData["T-3NAV"] = getNAVForDate(dateList["T-3NAV"], fundData.allNAVs);
       fundData["T-4NAV"] = getNAVForDate(dateList["T-4NAV"], fundData.allNAVs);
